@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantlab_data_pipeline"
+version = "0.1.0"
+description = "Financial data pipeline using WRDS and Alpha Vantage MCP."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5",
+    "pyarrow>=11",
+    "requests>=2.31",
+    "wrds>=3.1"
+]
+
+[project.urls]
+Homepage = "https://example.com"

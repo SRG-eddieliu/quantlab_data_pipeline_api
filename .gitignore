@@ -191,6 +191,13 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Local credentials and data
+credentials.yml
+config/credential.yml
+config/credentials.yml
+config/wrds_credentials.yml
+data/
+
 # PyPI configuration file
 .pypirc
 
