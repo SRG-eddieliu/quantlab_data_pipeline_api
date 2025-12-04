@@ -438,7 +438,7 @@ def run_ingestion(
 
 
     # Economic indicators: single calls without ticker.
-    for endpoint in ECONOMIC_ENDPOINTS:
+    for endpoint in economic_endpoints:
         function = REST_FUNCTION_MAP.get(endpoint, endpoint)
         out_path = raw_dir / endpoint / "global.parquet"
         if resume and out_path.exists():
