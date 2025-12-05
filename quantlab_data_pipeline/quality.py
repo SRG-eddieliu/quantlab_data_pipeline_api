@@ -1,51 +1,83 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import pandas as pd
 
-from .paths import final_data_path
+from .paths import final_dataset_path, final_dir
 
 logger = logging.getLogger(__name__)
 
 
-def _load_final(path: Optional[str] = None) -> pd.DataFrame:
-    target = final_data_path() if path is None else path
-    return pd.read_parquet(target)
+def _missing_detail(df: pd.DataFrame, top_n: int = 10) -> List[str]:
+    total = len(df)
+    if total == 0:
+        return []
+    na_counts = df.isna().sum()
+    nonzero = na_counts[na_counts > 0].sort_values(ascending=False)
+    details = []
+    for col, cnt in nonzero.head(top_n).items():
+        pct = (cnt / total) * 100 if total else 0
+        details.append(f"{col}: {int(cnt)} ({pct:.3f}%)")
+    return details
 
 
-def run_quality_checks(path: Optional[str] = None) -> Dict[str, List[str]]:
+def _load_dataset(name: str) -> pd.DataFrame:
+    return pd.read_parquet(final_dataset_path(name))
+
+
+def run_quality_checks(dataset: str = "price_daily", top_missing: int = 10) -> Dict[str, Dict[str, List[str]]]:
     """
-    Run basic quality checks on the final long-format dataset.
-    Returns a dictionary of issues by category.
+    Quality checks on final datasets.
+
+    - If `dataset` is a specific name (e.g., price_daily), runs checks on that dataset.
+    - If `dataset` == "all", scans every parquet in the final dir.
+    Returns a dict keyed by dataset with lists for missing/consistency/bounds/missing_detail.
     """
-    df = _load_final(path)
-    issues: Dict[str, List[str]] = {"missing": [], "consistency": [], "bounds": []}
+    datasets: List[str]
+    if dataset == "all":
+        datasets = sorted([p.stem for p in final_dir().glob("*.parquet")])
+    else:
+        datasets = [dataset]
 
-    missing = df[df["Value"].isna()]
-    if not missing.empty:
-        issues["missing"].append(f"Missing values: {len(missing)} rows")
+    reports: Dict[str, Dict[str, List[str]]] = {}
+    for ds in datasets:
+        try:
+            df = _load_dataset(ds)
+        except FileNotFoundError:
+            logger.warning("Dataset %s not found in final_dir", ds)
+            continue
+        issues: Dict[str, List[str]] = {"missing": [], "consistency": [], "bounds": [], "missing_detail": []}
 
-    price_metrics = ["open", "high", "low", "close", "adjusted_close"]
-    price = df[df["Metric_Name"].isin(price_metrics)]
-    if not price.empty:
-        wide = price.pivot_table(index=["Ticker", "Date"], columns="Metric_Name", values="Value", aggfunc="first")
-        if {"open", "high", "low", "close"}.issubset(wide.columns):
-            bad_open_high = wide[wide["open"] > wide["high"]]
-            bad_low_close = wide[wide["low"] > wide["close"]]
+        # Common: missing values
+        if df.isna().any().any():
+            issues["missing"].append(f"Rows with any missing values: {int(df.isna().any(axis=1).sum())}")
+            issues["missing_detail"] = _missing_detail(df, top_missing)
+
+        # Price-specific consistency/bounds
+        required_cols = {"open", "high", "low", "close"}
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+        if required_cols.issubset(df.columns):
+            bad_open_high = df[df["open"] > df["high"]]
+            bad_low_close = df[df["low"] > df["close"]]
             if not bad_open_high.empty:
                 issues["consistency"].append(f"open>high rows: {len(bad_open_high)}")
             if not bad_low_close.empty:
                 issues["consistency"].append(f"low>close rows: {len(bad_low_close)}")
+        if "volume" in df.columns:
+            negative = df[df["volume"] < 0]
+            if not negative.empty:
+                issues["bounds"].append(f"Negative volume values: {len(negative)} rows")
 
-    price_like = df[df["Metric_Name"].isin(price_metrics + ["volume"])]
-    negative = price_like[price_like["Value"] < 0]
-    if not negative.empty:
-        issues["bounds"].append(f"Negative price/volume values: {len(negative)} rows")
+        reports[ds] = issues
 
-    if not any(issues.values()):
-        logger.info("Quality checks passed with no issues detected.")
-    else:
-        logger.warning("Quality checks found issues: %s", issues)
-    return issues
+    # Log a summary
+    for ds, issues in reports.items():
+        if not any(issues.values()):
+            logger.info("Quality checks passed for %s with no issues detected.", ds)
+        else:
+            logger.warning("Quality checks for %s found issues: %s", ds, issues)
+
+    return reports

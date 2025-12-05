@@ -22,5 +22,15 @@ def raw_data_dir() -> Path:
 
 
 def final_data_path() -> Path:
-    """Single merged analytical table location."""
-    return data_root() / "final" / "final_long.parquet"
+    """Default final dataset path (price daily)."""
+    return data_root() / "final" / "price_daily.parquet"
+
+
+def final_dir() -> Path:
+    """Directory for final datasets."""
+    return data_root() / "final"
+
+
+def final_dataset_path(name: str) -> Path:
+    """Path helper for named final datasets (e.g., price_daily, price_weekly)."""
+    return final_dir() / f"{name}.parquet"
