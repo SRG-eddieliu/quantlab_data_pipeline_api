@@ -30,7 +30,7 @@ Constituents are pulled from `crsp_a_indexes.dsp500list_v2` using `permno`, `mbr
 - `export_all_failures()`: scans all raw Parquets for “invalid api call” rows and writes a single CSV (`data/data-processed/failures_all.csv`) with ticker/function/API URL to rerun.
 - `refetch_failures(failures_csv)`: re-fetch failed fundamentals/company overview calls listed in a CSV (ticker/function) and overwrite raw Parquets; rerun `transform_raw_to_final()` afterward.
 - `run_ingestion(..., fetch_ff=True)`: optionally pulls Fama-French factors from WRDS (`ff_all.factors_daily`) and writes `data/data-processed/FAMA_FRENCH_FACTORS.parquet`.
-- Notebook: `notebooks/pipeline_demo.ipynb` shows end-to-end usage (ingestion, transform, quality checks, failure handling, FF factors-only fetch).
+- Notebook: [`notebooks/pipeline_demo.ipynb`](notebooks/pipeline_demo.ipynb) shows end-to-end usage (ingestion, transform, quality checks, failure handling, FF factors-only fetch).
 
 ## API usage notes
 - Time series (`TIME_SERIES_DAILY_ADJUSTED`, `TIME_SERIES_WEEKLY_ADJUSTED`) are fetched via the Alpha Vantage REST API with `datatype=csv` and `outputsize=full` for full history.
