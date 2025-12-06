@@ -23,12 +23,12 @@ def raw_data_dir() -> Path:
 
 def final_data_path() -> Path:
     """Default final dataset path (price daily)."""
-    return data_root() / "final" / "price_daily.parquet"
+    return data_root() / "data-processed" / "price_daily.parquet"
 
 
 def final_dir() -> Path:
     """Directory for final datasets."""
-    return data_root() / "final"
+    return data_root() / "data-processed"
 
 
 def final_dataset_path(name: str) -> Path:

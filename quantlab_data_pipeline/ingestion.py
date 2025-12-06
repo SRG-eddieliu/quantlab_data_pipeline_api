@@ -275,6 +275,7 @@ def run_ingestion(
     use_paid_key: bool = True,
     tickers_override: Optional[List[str]] = None,
     resume: bool = True,
+    fetch_ff: bool = True,
 ) -> None:
     """
     Ingest WRDS constituents and Alpha Vantage data into raw Parquet files.
@@ -358,6 +359,15 @@ def run_ingestion(
 
     raw_dir = raw_data_dir()
     raw_dir.mkdir(parents=True, exist_ok=True)
+    if fetch_ff:
+        try:
+            ff_df = fetch_ff_factors(date_start, date_end, wrds_creds["username"], wrds_creds["password"])
+            ff_path = final_dir() / "FAMA_FRENCH_FACTORS.parquet"
+            ff_path.parent.mkdir(parents=True, exist_ok=True)
+            ff_df.to_parquet(ff_path, index=False)
+            logger.info("Wrote %d rows to %s", len(ff_df), ff_path)
+        except Exception as exc:
+            logger.warning("Failed to fetch Fama-French factors: %s", exc)
 
     # Drop rows without tickers (avoid <NA> values downstream)
     constituents = constituents[constituents["ticker"].notna()].copy()

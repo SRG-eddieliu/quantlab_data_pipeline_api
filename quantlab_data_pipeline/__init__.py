@@ -1,6 +1,7 @@
 """Primary entrypoints for the quantlab data pipeline."""
 
 from .ingestion import run_ingestion
+from .wrds_client import fetch_ff_factors
 from .transform import transform_raw_to_final
 from .quality import run_quality_checks
 from .final_data import get_final_data

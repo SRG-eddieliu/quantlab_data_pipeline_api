@@ -6,7 +6,7 @@ Automated pipeline for ingesting, transforming, and serving financial and econom
 - Repository root: code and configs.
 - External data root (sibling to repo): `../data/`
   - Raw landing zone: `../data/data-raw/`
-  - Final analytical table: `../data/final/final_long.parquet`
+  - Final analytical table: `../data/data-processed/final_long.parquet`
 
 ## Credentials
 Create `credentials.yml` at the repo root (gitignored) with Alpha Vantage and WRDS credentials:
@@ -22,13 +22,15 @@ Constituents are pulled from `crsp_a_indexes.dsp500list_v2` using `permno`, `mbr
 
 ## Key functions
 - `run_ingestion(date_start=None, date_end=None, ...)`: pulls constituents from WRDS, fetches Alpha Vantage via REST (MCP only for analytics if used), saves raw Parquet per ticker/endpoint. If dates not provided, uses `config/datalist.yml` defaults.
-- `transform_raw_to_final()`: builds domain-specific final tables in `../data/final/`: `price_daily.parquet`, `price_weekly.parquet`, `fundamentals.parquet`, `economic_indicators.parquet`, `company_overview.parquet`.
+- `transform_raw_to_final()`: builds domain-specific final tables in `../data/data-processed/`: `price_daily.parquet`, `price_weekly.parquet`, `fundamentals.parquet`, `economic_indicators.parquet`, `company_overview.parquet`.
 - `run_quality_checks(dataset="price_daily")`: basic completeness/consistency/bounds checks on price datasets.
 - `get_final_data(dataset="price_daily", tickers=None, start_date=None, end_date=None)`: read and filter a chosen final dataset.
-- `export_fundamental_failures()`: scans `fundamentals.parquet` for “invalid api call” rows and writes a CSV with suggested API calls to re-run (default: `data/final/failures_temp.csv`).
-- `export_company_overview_failures()`: scans `company_overview.parquet` for “invalid api call” rows and writes a CSV with suggested API calls to re-run (default: `data/final/company_overview_failures.csv`).
-- `export_all_failures()`: scans all raw Parquets for “invalid api call” rows and writes a single CSV (`data/final/failures_all.csv`) with ticker/function/API URL to rerun.
+- `export_fundamental_failures()`: scans `fundamentals.parquet` for “invalid api call” rows and writes a CSV with suggested API calls to re-run (default: `data/data-processed/failures_temp.csv`).
+- `export_company_overview_failures()`: scans `company_overview.parquet` for “invalid api call” rows and writes a CSV with suggested API calls to re-run (default: `data/data-processed/company_overview_failures.csv`).
+- `export_all_failures()`: scans all raw Parquets for “invalid api call” rows and writes a single CSV (`data/data-processed/failures_all.csv`) with ticker/function/API URL to rerun.
 - `refetch_failures(failures_csv)`: re-fetch failed fundamentals/company overview calls listed in a CSV (ticker/function) and overwrite raw Parquets; rerun `transform_raw_to_final()` afterward.
+- `run_ingestion(..., fetch_ff=True)`: optionally pulls Fama-French factors from WRDS (`ff.factors_daily` + momentum) and writes `data/data-raw/FAMA_FRENCH_FACTORS.parquet`.
+- Notebook: `notebooks/pipeline_demo.ipynb` shows end-to-end usage, now including an example cell to fetch Fama-French factors only (no Alpha Vantage calls).
 
 ## API usage notes
 - Time series (`TIME_SERIES_DAILY_ADJUSTED`, `TIME_SERIES_WEEKLY_ADJUSTED`) are fetched via the Alpha Vantage REST API with `datatype=csv` and `outputsize=full` for full history.

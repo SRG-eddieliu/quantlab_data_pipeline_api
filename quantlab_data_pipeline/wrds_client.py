@@ -83,3 +83,33 @@ def fetch_sp500_constituents(
 
     merged["ticker"] = merged["ticker"].fillna(merged["permno"].astype(str))
     return merged[["date", "ticker", "permno"]]
+
+
+def fetch_ff_factors(
+    start: date,
+    end: date,
+    username: str,
+    password: str,
+    library: str = "ff_all",
+    table: str = "factors_daily",
+) -> pd.DataFrame:
+    """
+    Pull Fama-French factors (including market, SMB, HML, etc.) from WRDS.
+    Returns columns: date, mktrf, smb, hml, rmw, cma, rf, umd (when available).
+    """
+    try:
+        import wrds  # type: ignore
+    except ImportError as exc:
+        raise ImportError("wrds package is required for WRDS access") from exc
+
+    db = wrds.Connection(wrds_username=username, wrds_password=password)
+    ff_query = f"select * from {library}.{table}"
+    logger.info("Querying WRDS for FF factors: %s", ff_query)
+    ff = db.raw_sql(ff_query)
+
+    db.close()
+    ff.columns = [c.lower() for c in ff.columns]
+    if "date" in ff.columns:
+        ff["date"] = pd.to_datetime(ff["date"]).dt.date
+        ff = ff[(ff["date"] >= start) & (ff["date"] <= end)]
+    return ff
