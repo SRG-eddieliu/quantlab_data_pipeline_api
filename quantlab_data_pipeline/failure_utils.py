@@ -98,7 +98,9 @@ def export_all_failures(temp_csv: Optional[Path] = None) -> Path:
             continue
         if df.empty:
             continue
-        if not df.astype(str).apply(lambda c: c.str.contains("invalid api call", case=False, na=False)).any().any():
+        if not df.astype(str).apply(
+            lambda c: c.str.contains("invalid api call|thank you for using alpha vantage", case=False, na=False)
+        ).any().any():
             continue
         parent = path.parent.name
         endpoint = parent

@@ -127,6 +127,7 @@ def transform_raw_to_final() -> Dict[str, Path]:
     fundamentals_map: Dict[str, list[pd.DataFrame]] = {}
     econ = []
     company_overview = []
+    failures = []
 
     fundamentals_endpoints = {
         "INCOME_STATEMENT",
@@ -157,6 +158,8 @@ def transform_raw_to_final() -> Dict[str, Path]:
         if path.name.startswith("wrds_"):
             continue
         parent = path.parent.name
+        grandparent = path.parent.parent.name if path.parent.parent else ""
+        endpoint = grandparent if parent in {"annual", "quarterly"} else parent
         ticker = path.stem
         df = pd.read_parquet(path)
         if df.empty:
@@ -165,35 +168,53 @@ def transform_raw_to_final() -> Dict[str, Path]:
         if idx % 50 == 0 or idx == total:
             logger.info("Processed %d/%d files...", idx, total)
 
-        if parent == "TIME_SERIES_DAILY_ADJUSTED":
+        # Detect API error/rate-limit payloads and log as failures, then skip.
+        df_str = df.astype(str)
+        err_mask = df_str.apply(
+            lambda c: c.str.contains("invalid api call|thank you for using alpha vantage", case=False, na=False)
+        ).any(axis=1)
+        only_info_cols = set(df.columns) <= {"Information", "Error Message", "Note"}
+        if err_mask.any() or only_info_cols:
+            endpoint = parent if parent not in {"annual", "quarterly"} else path.parent.parent.name
+            failures.append(
+                {
+                    "ticker": ticker,
+                    "function": endpoint,
+                    "path": str(path),
+                    "error_sample": df_str.stack().iloc[0] if not df_str.empty else "",
+                }
+            )
+            continue
+
+        if endpoint == "TIME_SERIES_DAILY_ADJUSTED":
             price_daily.append(_normalize_price(df, ticker))
             continue
-        if parent == "TIME_SERIES_WEEKLY_ADJUSTED":
+        if endpoint == "TIME_SERIES_WEEKLY_ADJUSTED":
             price_weekly.append(_normalize_price(df, ticker))
             continue
 
-        if parent in fundamentals_endpoints:
+        if endpoint in fundamentals_endpoints:
             period_type = None
-            if path.parent.parent.name in ("annual", "quarterly"):
-                period_type = path.parent.parent.name
-            elif path.parent.name in ("annual", "quarterly"):
-                period_type = path.parent.name
+            if parent in ("annual", "quarterly"):
+                period_type = parent
+            elif grandparent in ("annual", "quarterly"):
+                period_type = grandparent
             df = df.copy()
             df["ticker"] = ticker
-            statement = path.parent.parent.name if path.parent.parent.name in fundamentals_endpoints else parent
+            statement = endpoint
             df["statement"] = statement
             if period_type:
                 df["period_type"] = period_type
             fundamentals_map.setdefault(statement, []).append(df)
             continue
 
-        if parent in econ_endpoints:
+        if endpoint in econ_endpoints:
             df = df.copy()
-            df["indicator"] = parent
+            df["indicator"] = endpoint
             econ.append(df)
             continue
 
-        if parent == "COMPANY_OVERVIEW":
+        if endpoint == "COMPANY_OVERVIEW":
             df = df.copy()
             df["ticker"] = ticker
             company_overview.append(df)
@@ -218,7 +239,14 @@ def transform_raw_to_final() -> Dict[str, Path]:
         stmt_df = pd.concat(parts, ignore_index=True)
         if "Information" in stmt_df.columns:
             stmt_df = stmt_df.drop(columns=["Information"])
-        outputs[f"fundamentals_{statement.lower()}"] = _write(stmt_df, f"fundamentals_{statement.lower()}")
+        base_name = f"fundamentals_{statement.lower()}"
+        outputs[base_name] = _write(stmt_df, base_name)
+        if "period_type" in stmt_df.columns:
+            for period in ["quarterly", "annual"]:
+                sub = stmt_df[stmt_df["period_type"] == period].copy()
+                if sub.empty:
+                    continue
+                outputs[f"{base_name}_{period}"] = _write(sub, f"{base_name}_{period}")
     if not fundamentals_map:
         logger.info("No fundamentals data assembled.")
     if econ:
@@ -237,5 +265,15 @@ def transform_raw_to_final() -> Dict[str, Path]:
 
     if not outputs:
         raise ValueError("No data to transform.")
+
+    if failures:
+        fail_path = final_dir() / "failures_all.csv"
+        fail_df = pd.DataFrame(failures)
+        fail_path.parent.mkdir(parents=True, exist_ok=True)
+        if fail_path.exists():
+            existing = pd.read_csv(fail_path)
+            fail_df = pd.concat([existing, fail_df], ignore_index=True)
+        fail_df.to_csv(fail_path, index=False)
+        logger.warning("Logged %d failures with API error/rate-limit payloads to %s", len(failures), fail_path)
 
     return outputs
