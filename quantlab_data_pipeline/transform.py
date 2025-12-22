@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
+from pandas.tseries.offsets import BusinessDay
 
 from .paths import data_root, final_dataset_path, final_dir, raw_data_dir
 
@@ -240,6 +241,7 @@ def transform_raw_to_final() -> Dict[str, Path]:
         if "Information" in stmt_df.columns:
             stmt_df = stmt_df.drop(columns=["Information"])
         base_name = f"fundamentals_{statement.lower()}"
+
         outputs[base_name] = _write(stmt_df, base_name)
         if "period_type" in stmt_df.columns:
             for period in ["quarterly", "annual"]:
